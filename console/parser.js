@@ -45,5 +45,5 @@ exports.parse = function (string){
 };
 
 // === Word Lists ===
-var skipWords = ['','a','an','at','in','on','the','to'];
-var subjectEndWords = ['on','with','and'];
+var skipWords = ['','a','an','in','on','the','to'];
+var subjectEndWords = ['on','with','and','at'];

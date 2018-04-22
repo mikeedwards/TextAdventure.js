@@ -1,5 +1,5 @@
 // === Debug Variable ===
-var debugMode = false;
+var debugMode = true;
 
 // === Import Necessary Functionality ===
 var fileSystem = require('fs');
@@ -23,11 +23,11 @@ exports.input = function(input, gameID){
 		try {
 			try {
 				debug('---Attempting to run cartridge command "'+command.action+'"');
-				returnString = eval('gameActions.'+command.action+'(game,command,consoleInterface)');
+				returnString = gameActions[command.action](game,command,consoleInterface);
 			} catch(cartridgeCommandError) {
 				debug('-----'+cartridgeCommandError);
 				debug('---Attempting to run cartridge command "'+command.action+'"');
-				returnString = eval('actions.'+command.action+'(game,command)').message;
+        returnString = actions[command.action](game,command).message;
 			}
 		} catch(consoleCommandError){
 			try {
@@ -53,8 +53,10 @@ exports.input = function(input, gameID){
 		}
 		return checkForGameEnd(game, returnString);
 	} else {
-		console.log(gameID + ': no game');
-		if(command.action === 'load'){
+	  console.log(gameID + ': no game');
+    if(process.env['DEFAULT_CARTRIDGE']){
+      return loadCartridge(gameID, process.env['DEFAULT_CARTRIDGE']);
+    } else if(command.action === 'load'){
 			return loadCartridge(gameID, command.subject);
 		} else {
 			return listCartridges();
@@ -214,13 +216,39 @@ var actions = {
 			return {message: 'What would you like to use?', success: false};
 		}
 		try {
-			return {message: getItem(game.player.inventory, command.subject).use(), success: true};
+			return {message: getItem(game.player.inventory, command.subject).use(command), success: true};
 		} catch (itemNotInInventoryError) {
 			return {message: 'Can\'t do that.', success: false};
 		}
-	}
+	},
+
+  wield : function(game, command){
+    if(!command.subject){
+      return {message: 'What would you like to arm yourself with?', success: false};
+    }
+    try {
+      return {message: getItem(game.player.inventory, command.subject).wield(command), success: true};
+    } catch (itemNotInInventoryError) {
+      return {message: 'Can\'t do that.', success: false};
+    }
+  }
 };
 
+const aliases = {
+  drop: ['discard',],
+  take: ['get','grab',],
+  inventory: ['i',],
+  look: ['examine','l',],
+  go: ['g',],
+  wield: ['draw','arm',]
+};
+
+Object.keys(aliases).forEach(function(command) {
+  aliases[command].forEach(function (alias) {
+    console.info(alias, command);
+    actions[alias] = actions[command];
+  });
+});
 
 // ----------------------------\
 // === Helper Functions ===============================================================================================
@@ -247,7 +275,7 @@ function clone(obj) {
 }
 
 function consoleInterface(game, command){
-	return eval('actions.'+command.action+'(game,command);')
+	return actions[command.action](game,command);
 }
 
 function debug(debugText){
@@ -366,9 +394,31 @@ function itemsToString(itemsObject){
 
 function interact(game, interaction, subject){
 	try{
-		return message = getCurrentLocation(game).items[subject].interactions[interaction];
+	  const action = getCurrentLocation(game).items[subject].interactions[interaction];
+    if (!action) {
+      throw "action not found";
+    }
+    if (typeof action === "function") {
+      return action();
+    }
+		return action;
 	} catch(error) {
-		return getCurrentLocation(game).interactables[subject][interaction];
+    try{
+      const action = game.player.inventory[subject].interactions[interaction];
+      if (!action) {
+        throw "interaction not found";
+      }
+      if (typeof action === "function") {
+        return action();
+      }
+  		return action;
+    } catch(error) {
+      const action = getCurrentLocation(game).interactables[subject][interaction];
+      if (typeof action === "function") {
+        return action();
+      }
+      return action;
+    }
 	}
 }
 
